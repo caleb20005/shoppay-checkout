@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -20,6 +20,13 @@ type Payment = { id: string; phone: string; amount: number; status: PayStatus; a
 type Status = { phone: string; amount: string } | null;
 const KEY = "shop-till-payments";
 
+const TABS = [
+  { key: "progress", label: "Progress" },
+  { key: "history", label: "Payment history" },
+  { key: "calc", label: "Calculator" },
+] as const;
+type TabKey = (typeof TABS)[number]["key"];
+
 const badge: Record<PayStatus, string> = {
   pending: "bg-warning/15 text-warning-foreground border-warning/40",
   paid: "bg-success/15 text-success border-success/40",
@@ -32,7 +39,7 @@ function Index() {
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState<Status>(null);
   const [history, setHistory] = useState<Payment[]>([]);
-  const [tab, setTab] = useState<"progress" | "history" | "calc">("progress");
+  const [tab, setTab] = useState<TabKey>("progress");
   const [filter, setFilter] = useState<"all" | PayStatus>("all");
   useEffect(() => {
     try { setHistory(JSON.parse(localStorage.getItem(KEY) || "[]")); } catch { /* ignore */ }
@@ -75,12 +82,7 @@ function Index() {
       <div className="mx-auto max-w-6xl">
         <h1 className="font-display text-4xl font-bold text-foreground">Shop Till</h1>
         <p className="mt-1 text-muted-foreground">Send a payment prompt to your client's phone.</p>
-        <div role="tablist" className="mt-6 inline-flex gap-1 rounded-lg bg-muted p-1">
-          {([["progress", "Progress"], ["history", "Payment history"], ["calc", "Calculator"]] as const).map(([k, label]) => (
-            <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
-              className={`rounded-md px-4 py-1.5 text-sm font-medium ${tab === k ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>{label}</button>
-          ))}
-        </div>
+        <TabDropdown tab={tab} onChange={setTab} />
         <div className="mt-8 grid items-start gap-6 lg:grid-cols-[380px_1fr]">
           <section className="rounded-2xl border bg-card p-6 shadow-sm">
             <h2 className="text-lg font-semibold">Payment request</h2>
@@ -321,6 +323,52 @@ function Progress({ history }: { history: Payment[] }) {
         </section>
       </div>
       {history.length === 0 && <p className="text-center text-sm text-muted-foreground">Send your first payment prompt to see progress here.</p>}
+    </div>
+  );
+}
+
+function TabDropdown({ tab, onChange }: { tab: TabKey; onChange: (t: TabKey) => void }) {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+  const current = TABS.find((t) => t.key === tab) ?? TABS[0];
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => { if (!wrap.current?.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={wrap} className="no-print relative mt-6 w-full max-w-64">
+      <button type="button" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between gap-3 rounded-lg border bg-card px-4 py-2.5 text-sm font-semibold shadow-sm transition hover:bg-muted">
+        <span className="flex items-center gap-2">
+          <i className="h-2 w-2 shrink-0 rounded-full bg-primary" />
+          {current.label}
+        </span>
+        <svg viewBox="0 0 20 20" aria-hidden="true" className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}>
+          <path d="M5 8l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <ul role="listbox" aria-label="Sections" className="absolute z-20 mt-2 w-full overflow-hidden rounded-lg border bg-popover p-1 shadow-lg">
+          {TABS.map((t) => (
+            <li key={t.key} role="option" aria-selected={t.key === tab}>
+              <button type="button" onClick={() => { onChange(t.key); setOpen(false); }}
+                className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition ${t.key === tab ? "bg-primary font-semibold text-primary-foreground" : "hover:bg-muted"}`}>
+                {t.label}
+                {t.key === tab && <span aria-hidden="true">✓</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
