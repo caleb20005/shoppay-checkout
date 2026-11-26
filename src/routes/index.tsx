@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -15,19 +15,45 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
+type PayStatus = "pending" | "paid" | "failed";
+type Payment = { id: string; phone: string; amount: number; status: PayStatus; at: number };
 type Status = { phone: string; amount: string } | null;
+const KEY = "shop-till-payments";
+
+const badge: Record<PayStatus, string> = {
+  pending: "bg-warning/15 text-warning-foreground border-warning/40",
+  paid: "bg-success/15 text-success border-success/40",
+  failed: "bg-destructive/10 text-destructive border-destructive/40",
+};
 
 function Index() {
   const [phone, setPhone] = useState("");
   const [amount, setAmount] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState<Status>(null);
+  const [history, setHistory] = useState<Payment[]>([]);
+  const [filter, setFilter] = useState<"all" | PayStatus>("all");
+  useEffect(() => {
+    try { setHistory(JSON.parse(localStorage.getItem(KEY) || "[]")); } catch { /* ignore */ }
+  }, []);
+  const save = (h: Payment[]) => { setHistory(h); localStorage.setItem(KEY, JSON.stringify(h)); };
+  const setStatus = (id: string, status: PayStatus) =>
+    save(history.map((p) => (p.id === id ? { ...p, status } : p)));
+  const shown = history.filter((p) => filter === "all" || p.status === filter);
+  const totals = {
+    paid: history.filter((p) => p.status === "paid").reduce((a, p) => a + p.amount, 0),
+    pending: history.filter((p) => p.status === "pending").length,
+  };
   const valid = /^\+?\d{7,15}$/.test(phone.replace(/\s/g, "")) && Number(amount) > 0;
 
   const send = () => {
     setSending(true);
     setTimeout(() => {
       setSent({ phone, amount: Number(amount).toFixed(2) });
+      const entry: Payment = { id: crypto.randomUUID(), phone, amount: Number(amount), status: "pending", at: Date.now() };
+      const next = [entry, ...JSON.parse(localStorage.getItem(KEY) || "[]")];
+      setHistory(next); localStorage.setItem(KEY, JSON.stringify(next));
+      setPhone(""); setAmount("");
       setSending(false);
     }, 1200);
   };
@@ -60,6 +86,49 @@ function Index() {
           </section>
           <Calculator onUse={(v) => setAmount(v)} />
         </div>
+        <section className="mt-6 rounded-2xl border bg-card p-6 shadow-sm">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold">Payment history</h2>
+              <p className="text-sm text-muted-foreground">
+                Collected <span className="font-semibold text-success">{totals.paid.toFixed(2)}</span> · {totals.pending} pending
+              </p>
+            </div>
+            <div className="flex gap-1 rounded-lg bg-muted p-1">
+              {(["all", "pending", "paid", "failed"] as const).map((f) => (
+                <button key={f} onClick={() => setFilter(f)}
+                  className={`rounded-md px-3 py-1 text-sm capitalize ${filter === f ? "bg-card font-semibold shadow-sm" : "text-muted-foreground"}`}>{f}</button>
+              ))}
+            </div>
+          </div>
+          {shown.length === 0 ? (
+            <p className="mt-6 py-8 text-center text-muted-foreground">No payments yet.</p>
+          ) : (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="border-b text-xs uppercase tracking-wide text-muted-foreground">
+                  <tr><th className="py-2">Date</th><th>Client phone</th><th className="text-right">Amount</th><th className="pl-6">Status</th><th className="text-right">Update</th></tr>
+                </thead>
+                <tbody>
+                  {shown.map((p) => (
+                    <tr key={p.id} className="border-b last:border-0">
+                      <td className="py-3 text-muted-foreground">{new Date(p.at).toLocaleString()}</td>
+                      <td className="font-mono">{p.phone}</td>
+                      <td className="text-right font-semibold tabular-nums">{p.amount.toFixed(2)}</td>
+                      <td className="pl-6"><span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold capitalize ${badge[p.status]}`}>{p.status}</span></td>
+                      <td className="text-right">
+                        <select value={p.status} onChange={(e) => setStatus(p.id, e.target.value as PayStatus)}
+                          className="rounded-md border bg-background px-2 py-1 text-sm">
+                          <option value="pending">Pending</option><option value="paid">Paid</option><option value="failed">Failed</option>
+                        </select>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
       </div>
     </main>
   );
