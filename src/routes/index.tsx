@@ -32,7 +32,7 @@ function Index() {
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState<Status>(null);
   const [history, setHistory] = useState<Payment[]>([]);
-  const [tab, setTab] = useState<"history" | "calc">("history");
+  const [tab, setTab] = useState<"progress" | "history" | "calc">("progress");
   const [filter, setFilter] = useState<"all" | PayStatus>("all");
   useEffect(() => {
     try { setHistory(JSON.parse(localStorage.getItem(KEY) || "[]")); } catch { /* ignore */ }
@@ -98,11 +98,12 @@ function Index() {
           </section>
           <div>
             <div role="tablist" className="mb-3 inline-flex gap-1 rounded-lg bg-muted p-1">
-              {([["history", "Payment history"], ["calc", "Calculator"]] as const).map(([k, label]) => (
+              {([["progress", "Progress"], ["history", "Payment history"], ["calc", "Calculator"]] as const).map(([k, label]) => (
                 <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
                   className={`rounded-md px-4 py-1.5 text-sm font-medium ${tab === k ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>{label}</button>
               ))}
             </div>
+            {tab === "progress" && <Progress history={history} />}
             {tab === "calc" && <Calculator onUse={(v) => setAmount(v)} />}
             {tab === "history" && (
 
@@ -211,5 +212,106 @@ function Calculator({ onUse }: { onUse: (v: string) => void }) {
         Use result as amount
       </button>
     </section>
+  );
+}
+
+function Progress({ history }: { history: Payment[] }) {
+  const paid = history.filter((p) => p.status === "paid");
+  const collected = paid.reduce((a, p) => a + p.amount, 0);
+  const pendingAmt = history.filter((p) => p.status === "pending").reduce((a, p) => a + p.amount, 0);
+  const rate = history.length ? Math.round((paid.length / history.length) * 100) : 0;
+  const clients = new Set(history.map((p) => p.phone.replace(/\D/g, ""))).size;
+
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - (6 - i));
+    const end = d.getTime() + 86400000;
+    const inDay = history.filter((p) => p.at >= d.getTime() && p.at < end);
+    return {
+      label: d.toLocaleDateString(undefined, { weekday: "short" }),
+      paid: inDay.filter((p) => p.status === "paid").reduce((a, p) => a + p.amount, 0),
+      requested: inDay.reduce((a, p) => a + p.amount, 0),
+      count: inDay.length,
+    };
+  });
+  const max = Math.max(1, ...days.map((d) => d.requested));
+  const maxCount = Math.max(1, ...days.map((d) => d.count));
+
+  const counts = (["paid", "pending", "failed"] as const).map((k) => ({ k, n: history.filter((p) => p.status === k).length }));
+  const colors = { paid: "var(--success)", pending: "var(--warning)", failed: "var(--destructive)" };
+  let acc = 0;
+  const C = 2 * Math.PI * 40;
+
+  const pts = days.map((d, i) => `${(i / 6) * 300},${100 - (d.count / maxCount) * 90}`).join(" ");
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+        {[
+          ["Collected", collected.toFixed(2), "text-success"],
+          ["Pending amount", pendingAmt.toFixed(2), "text-warning-foreground"],
+          ["Success rate", `${rate}%`, "text-primary"],
+          ["Clients", String(clients), "text-secondary-foreground"],
+        ].map(([l, v, c]) => (
+          <div key={l} className="rounded-2xl border bg-card p-4 shadow-sm">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{l}</p>
+            <p className={`mt-1 font-display text-2xl font-bold tabular-nums ${c}`}>{v}</p>
+          </div>
+        ))}
+      </div>
+
+      <section className="rounded-2xl border bg-card p-6 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold">Last 7 days</h2>
+          <div className="flex gap-4 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm bg-accent" />Requested</span>
+            <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm bg-primary" />Paid</span>
+          </div>
+        </div>
+        <div className="mt-6 flex h-48 items-end gap-3">
+          {days.map((d) => (
+            <div key={d.label} className="group flex flex-1 flex-col items-center gap-2">
+              <div className="relative flex h-40 w-full items-end justify-center">
+                <div className="absolute bottom-0 w-full max-w-12 rounded-t-md bg-accent transition-all" style={{ height: `${(d.requested / max) * 100}%` }} />
+                <div className="absolute bottom-0 w-full max-w-12 rounded-t-md bg-primary transition-all" style={{ height: `${(d.paid / max) * 100}%` }} />
+                <span className="absolute -top-1 rounded bg-foreground px-1.5 py-0.5 text-[10px] text-background opacity-0 group-hover:opacity-100">{d.paid.toFixed(0)} / {d.requested.toFixed(0)}</span>
+              </div>
+              <span className="text-xs text-muted-foreground">{d.label}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        <section className="rounded-2xl border bg-card p-6 shadow-sm">
+          <h2 className="text-lg font-semibold">Payment status</h2>
+          <div className="mt-4 flex items-center gap-6">
+            <svg viewBox="0 0 100 100" className="h-32 w-32 -rotate-90">
+              <circle cx="50" cy="50" r="40" fill="none" stroke="var(--muted)" strokeWidth="14" />
+              {counts.map(({ k, n }) => {
+                const len = history.length ? (n / history.length) * C : 0;
+                const el = <circle key={k} cx="50" cy="50" r="40" fill="none" stroke={colors[k]} strokeWidth="14" strokeDasharray={`${len} ${C - len}`} strokeDashoffset={-acc} />;
+                acc += len; return el;
+              })}
+            </svg>
+            <ul className="space-y-2 text-sm">
+              {counts.map(({ k, n }) => (
+                <li key={k} className="flex items-center gap-2 capitalize">
+                  <i className="h-3 w-3 rounded-full" style={{ background: colors[k] }} />{k}<span className="ml-auto pl-4 font-semibold tabular-nums">{n}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+        <section className="rounded-2xl border bg-card p-6 shadow-sm">
+          <h2 className="text-lg font-semibold">Prompts sent per day</h2>
+          <svg viewBox="-5 0 310 110" className="mt-4 h-32 w-full overflow-visible" preserveAspectRatio="none">
+            <polyline points={`0,100 ${pts} 300,100`} fill="var(--secondary)" opacity="0.5" />
+            <polyline points={pts} fill="none" stroke="var(--secondary-foreground)" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
+          </svg>
+          <div className="mt-2 flex justify-between text-xs text-muted-foreground">{days.map((d) => <span key={d.label}>{d.label}</span>)}</div>
+        </section>
+      </div>
+      {history.length === 0 && <p className="text-center text-sm text-muted-foreground">Send your first payment prompt to see progress here.</p>}
+    </div>
   );
 }
