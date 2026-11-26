@@ -75,6 +75,12 @@ function Index() {
       <div className="mx-auto max-w-6xl">
         <h1 className="font-display text-4xl font-bold text-foreground">Shop Till</h1>
         <p className="mt-1 text-muted-foreground">Send a payment prompt to your client's phone.</p>
+        <div role="tablist" className="mt-6 inline-flex gap-1 rounded-lg bg-muted p-1">
+          {([["progress", "Progress"], ["history", "Payment history"], ["calc", "Calculator"]] as const).map(([k, label]) => (
+            <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
+              className={`rounded-md px-4 py-1.5 text-sm font-medium ${tab === k ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>{label}</button>
+          ))}
+        </div>
         <div className="mt-8 grid items-start gap-6 lg:grid-cols-[380px_1fr]">
           <section className="rounded-2xl border bg-card p-6 shadow-sm">
             <h2 className="text-lg font-semibold">Payment request</h2>
@@ -97,12 +103,6 @@ function Index() {
             )}
           </section>
           <div>
-            <div role="tablist" className="mb-3 inline-flex gap-1 rounded-lg bg-muted p-1">
-              {([["progress", "Progress"], ["history", "Payment history"], ["calc", "Calculator"]] as const).map(([k, label]) => (
-                <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
-                  className={`rounded-md px-4 py-1.5 text-sm font-medium ${tab === k ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>{label}</button>
-              ))}
-            </div>
             {tab === "progress" && <Progress history={history} />}
             {tab === "calc" && <Calculator onUse={(v) => setAmount(v)} />}
             {tab === "history" && (
