@@ -39,7 +39,18 @@ function Index() {
   const save = (h: Payment[]) => { setHistory(h); localStorage.setItem(KEY, JSON.stringify(h)); };
   const setStatus = (id: string, status: PayStatus) =>
     save(history.map((p) => (p.id === id ? { ...p, status } : p)));
-  const shown = history.filter((p) => filter === "all" || p.status === filter);
+  const [q, setQ] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const digits = q.replace(/\D/g, "");
+  const fromTs = from ? new Date(from + "T00:00:00").getTime() : -Infinity;
+  const toTs = to ? new Date(to + "T23:59:59.999").getTime() : Infinity;
+  const shown = history.filter(
+    (p) =>
+      (filter === "all" || p.status === filter) &&
+      (!digits || p.phone.replace(/\D/g, "").includes(digits)) &&
+      p.at >= fromTs && p.at <= toTs,
+  );
   const totals = {
     paid: history.filter((p) => p.status === "paid").reduce((a, p) => a + p.amount, 0),
     pending: history.filter((p) => p.status === "pending").length,
@@ -101,8 +112,23 @@ function Index() {
               ))}
             </div>
           </div>
+          <div className="mt-4 flex flex-wrap items-end gap-3">
+            <label className="flex-1 min-w-48 text-xs font-medium text-muted-foreground">Search phone
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="e.g. 712345" inputMode="tel"
+                className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm text-foreground" />
+            </label>
+            <label className="text-xs font-medium text-muted-foreground">From
+              <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="mt-1 block rounded-md border bg-background px-3 py-2 text-sm text-foreground" />
+            </label>
+            <label className="text-xs font-medium text-muted-foreground">To
+              <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="mt-1 block rounded-md border bg-background px-3 py-2 text-sm text-foreground" />
+            </label>
+            {(q || from || to) && (
+              <button onClick={() => { setQ(""); setFrom(""); setTo(""); }} className="rounded-md border px-3 py-2 text-sm hover:bg-muted">Clear</button>
+            )}
+          </div>
           {shown.length === 0 ? (
-            <p className="mt-6 py-8 text-center text-muted-foreground">No payments yet.</p>
+            <p className="mt-6 py-8 text-center text-muted-foreground">{history.length ? "No payments match your search." : "No payments yet."}</p>
           ) : (
             <div className="mt-4 overflow-x-auto">
               <table className="w-full text-left text-sm">
