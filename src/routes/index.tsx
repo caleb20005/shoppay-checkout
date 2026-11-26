@@ -244,7 +244,16 @@ function Progress({ history }: { history: Payment[] }) {
   const pts = days.map((d, i) => `${(i / 6) * 300},${100 - (d.count / maxCount) * 90}`).join(" ");
 
   return (
-    <div className="space-y-6">
+    <div id="progress-report" className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="font-display text-xl font-bold">Business progress report</h2>
+          <p className="text-xs text-muted-foreground">Generated {new Date().toLocaleString()}</p>
+        </div>
+        <button onClick={() => window.print()} className="no-print rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90">
+          Export PDF
+        </button>
+      </div>
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         {[
           ["Collected", collected.toFixed(2), "text-success"],
